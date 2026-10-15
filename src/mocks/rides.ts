@@ -1,0 +1,96 @@
+import type { RideHistoryItem, EarningsEntry, Earnings } from '../types';
+
+// ─── Ride History (Nepal) ───────────────────────────────────────────────────
+export const MOCK_RIDE_HISTORY: RideHistoryItem[] = [
+  {
+    id: 'ride-hist-001',
+    date: '2026-10-14',
+    pickup: 'Thamel Tourist Hub',
+    destination: 'Tribhuvan International Airport (TIA)',
+    fare: 450,
+    duration: 25,
+    vehicleType: 'car',
+    driverName: 'Ram Bahadur Gurung',
+    rating: 5,
+    status: 'completed',
+  },
+  {
+    id: 'ride-hist-002',
+    date: '2026-10-13',
+    pickup: 'New Baneshwor',
+    destination: 'Durbarmarg (Kingsway)',
+    fare: 120,
+    duration: 12,
+    vehicleType: 'bike',
+    driverName: 'Suresh Shrestha',
+    rating: 5,
+    status: 'completed',
+  },
+  {
+    id: 'ride-hist-003',
+    date: '2026-10-12',
+    pickup: 'Patan Durbar Square',
+    destination: 'Swayambhunath Stupa',
+    fare: 350,
+    duration: 22,
+    vehicleType: 'car',
+    driverName: 'Ram Bahadur Gurung',
+    rating: 4,
+    status: 'completed',
+  },
+  {
+    id: 'ride-hist-004',
+    date: '2026-10-11',
+    pickup: 'Kalanki Chowk',
+    destination: 'Koteshwor Chowk',
+    fare: 160,
+    duration: 18,
+    vehicleType: 'bike',
+    driverName: 'Suresh Shrestha',
+    rating: 5,
+    status: 'completed',
+  },
+  {
+    id: 'ride-hist-005',
+    date: '2026-10-10',
+    pickup: 'Boudhanath Stupa',
+    destination: 'Budhanilkantha Temple',
+    fare: 680,
+    duration: 32,
+    vehicleType: 'premium',
+    driverName: 'Dipak Adhikari',
+    rating: 5,
+    status: 'completed',
+  },
+  {
+    id: 'ride-hist-006',
+    date: '2026-10-09',
+    pickup: 'Kathmandu New Road',
+    destination: 'Pokhara Lakeside',
+    fare: 0,
+    duration: 0,
+    vehicleType: 'car',
+    driverName: 'Ram Bahadur Gurung',
+    rating: 0,
+    status: 'cancelled',
+  },
+];
+
+// ─── Driver Earnings (NPR) ────────────────────────────────────────────────────
+export const MOCK_EARNINGS: Earnings = {
+  today: 2850,
+  week: 18400,
+  month: 72500,
+  tripsToday: 7,
+  tripsWeek: 42,
+};
+
+export const MOCK_EARNINGS_HISTORY: EarningsEntry[] = [
+  { id: 'earn-001', date: '2026-10-14', trips: 8, amount: 3250 },
+  { id: 'earn-002', date: '2026-10-13', trips: 7, amount: 2850 },
+  { id: 'earn-003', date: '2026-10-12', trips: 6, amount: 2400 },
+  { id: 'earn-004', date: '2026-10-11', trips: 9, amount: 3600 },
+  { id: 'earn-005', date: '2026-10-10', trips: 5, amount: 2100 },
+  { id: 'earn-006', date: '2026-10-09', trips: 8, amount: 3150 },
+  { id: 'earn-007', date: '2026-10-08', trips: 7, amount: 2750 },
+];

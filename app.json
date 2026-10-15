@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "magicride",
+    "name": "MagicRide",
     "slug": "magicride",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -8,15 +8,34 @@
     "scheme": "magicride",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": true,
+      "bundleIdentifier": "com.magicride.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "MagicRide needs your location to show nearby drivers and navigate your trip.",
+        "NSLocationAlwaysUsageDescription": "MagicRide uses your location to track your trip."
+      },
+      "config": {
+        "googleMapsApiKey": "YOUR_IOS_KEY"
+      }
     },
     "android": {
+      "package": "com.magicride.app",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_ANDROID_KEY"
+        }
+      },
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#071226",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "monochromeImage": "./assets/images/android-icon-foreground.png"
       },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "VIBRATE"
+      ],
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -28,15 +47,27 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#1A1A2E",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "MagicRide needs your location to show nearby drivers."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#00D09C"
         }
       ]
     ],
     "experiments": {
-      "typedRoutes": true,
-      "reactCompiler": true
+      "typedRoutes": true
     }
   }
 }
