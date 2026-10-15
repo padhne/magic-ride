@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, Pressable, StyleSheet,
   StatusBar, KeyboardAvoidingView, Platform,
-  ScrollView, TouchableOpacity,
+  ScrollView, TouchableOpacity, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -89,14 +89,25 @@ export default function OtpScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Back button */}
-          <Pressable
-            style={styles.back}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/phone'))}
-            hitSlop={10}
-          >
-            <Ionicons name="chevron-back" size={22} color="#1A1A2E" />
-          </Pressable>
+          {/* Back button & Brand */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <Pressable
+              style={styles.back}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(auth)/phone'))}
+              hitSlop={10}
+            >
+              <Ionicons name="chevron-back" size={22} color="#1A1A2E" />
+            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+              <Image
+                source={require('../../../assets/images/magic-ride-logo.png')}
+                style={{ width: 28, height: 28, borderRadius: 8 }}
+                resizeMode="cover"
+              />
+              <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A1A2E' }}>Magic Ride</Text>
+            </View>
+            <View style={{ width: 40 }} />
+          </View>
 
           <Text style={styles.heading}>Verify your number</Text>
           <Text style={styles.sub}>

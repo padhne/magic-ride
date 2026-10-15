@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet, StatusBar, TouchableOpacity } from 'react-native';
+import { View, Text, Pressable, StyleSheet, StatusBar, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/authStore';
@@ -22,8 +22,8 @@ export default function RoleScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* ── Compact top bar with back button only ── */}
-      <View style={styles.topBar}>
+      {/* ── Top bar with back button & Brand logo ── */}
+      <View style={[styles.topBar, { justifyContent: 'space-between' }]}>
         <Pressable
           style={styles.backBtn}
           onPress={() => router.canGoBack() ? router.back() : router.replace('/(auth)/onboarding')}
@@ -31,6 +31,15 @@ export default function RoleScreen() {
         >
           <Ionicons name="chevron-back" size={22} color="#1A1A2E" />
         </Pressable>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+          <Image
+            source={require('../../../assets/images/magic-ride-logo.png')}
+            style={{ width: 28, height: 28, borderRadius: 8 }}
+            resizeMode="cover"
+          />
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1A1A2E' }}>Magic Ride</Text>
+        </View>
+        <View style={{ width: 36 }} />
       </View>
 
       {/* ── Main Content ── */}
