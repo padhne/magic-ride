@@ -12,6 +12,8 @@ import {
   StatusBar,
   Image,
   TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -230,21 +232,28 @@ export default function RiderHome() {
         </View>
       </SafeAreaView>
 
-      {/* ── MAP ────────────────────────────────────────────────────── */}
-      <MapSimulation
-        riderLocation={pickupPlace?.coordinate}
-        destinationLocation={destinationPlace?.coordinate}
-        routeStatus={status}
-        vehicleType={selectedVehicleType}
-        height={status === 'idle' ? 210 : 140}
-      />
+      {/* ── MAP (Hidden on Completed to give full screen to Review) ── */}
+      {status !== 'completed' && (
+        <MapSimulation
+          riderLocation={pickupPlace?.coordinate}
+          destinationLocation={destinationPlace?.coordinate}
+          routeStatus={status}
+          vehicleType={selectedVehicleType}
+          height={status === 'idle' ? 210 : 140}
+        />
+      )}
 
       {/* ── BOTTOM SHEET ───────────────────────────────────────────── */}
-      <View style={styles.sheet}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: status === 'searching' ? 120 : 64 }}
+      <View style={[styles.sheet, status === 'completed' && { marginTop: 0, borderTopLeftRadius: 0, borderTopRightRadius: 0 }]}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: status === 'searching' || status === 'completed' ? 140 : 64 }}
+          >
           {/* ── IDLE: Home screen ─────────────────────────────────── */}
           {status === 'idle' && (
             <View>
@@ -628,6 +637,7 @@ export default function RiderHome() {
             </View>
           )}
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
 
       {/* ── DOCKED BOTTOM BAR (Always visible above device nav bar) ── */}
@@ -649,6 +659,31 @@ export default function RiderHome() {
               </Text>
             </View>
             <Ionicons name="arrow-forward-circle" size={30} color="#FFFFFF" />
+          </TouchableOpacity>
+        </SafeAreaView>
+      )}
+
+      {/* ── DOCKED BOTTOM BAR (Feedback Submit — Guaranteed 100% visible) ── */}
+      {status === 'completed' && (
+        <SafeAreaView edges={['bottom']} style={styles.dockedBottomBar}>
+          <TouchableOpacity
+            style={[styles.dockedBtn, feedbackSubmitted && { backgroundColor: '#22C55E' }]}
+            onPress={handleSubmitFeedback}
+            activeOpacity={0.88}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.dockedBtnSub}>
+                {feedbackSubmitted ? 'FEEDBACK RECORDED' : 'SUBMIT DRIVER REVIEW'}
+              </Text>
+              <Text style={styles.dockedBtnTitle}>
+                {feedbackSubmitted ? 'Thank You! Returning to Home ✓' : 'Submit Feedback & Done ➔'}
+              </Text>
+            </View>
+            <Ionicons
+              name={feedbackSubmitted ? 'checkmark-circle' : 'arrow-forward-circle'}
+              size={30}
+              color="#FFFFFF"
+            />
           </TouchableOpacity>
         </SafeAreaView>
       )}
