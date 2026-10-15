@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, StatusBar, TouchableOpacity,
+  View, Text, StyleSheet, StatusBar, TouchableOpacity, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -39,7 +39,14 @@ export default function SuccessScreen() {
         </View>
 
         <Text style={styles.heading}>Account Created!</Text>
-        <Text style={styles.sub}>Welcome to Magic Ride</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginVertical: 6 }}>
+          <Image
+            source={require('../../../assets/images/magic-ride-logo.png')}
+            style={{ width: 22, height: 22, borderRadius: 6 }}
+            resizeMode="cover"
+          />
+          <Text style={styles.sub}>Welcome to Magic Ride</Text>
+        </View>
         <Text style={styles.caption}>Your account is ready.{'\n'}Let's get you moving!</Text>
       </View>
 
