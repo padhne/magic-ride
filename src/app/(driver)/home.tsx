@@ -192,7 +192,7 @@ export default function DriverHome() {
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={styles.riderFareLabel}>Fare</Text>
-                  <Text style={styles.riderFare}>NPR {(pendingRequest.fare * 10).toFixed(0)}</Text>
+                  <Text style={styles.riderFare}>{formatFare(pendingRequest.fare)}</Text>
                 </View>
               </View>
 

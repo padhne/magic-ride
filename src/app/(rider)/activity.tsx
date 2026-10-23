@@ -17,7 +17,7 @@ const GRAY_BG = '#F5F7FA';
 
 export default function ActivityScreen() {
   const [filter, setFilter] = useState<'all' | 'completed' | 'cancelled'>('all');
-  const { setDestination, transition } = useRideStore();
+  const { status, setDestination, transition, reset } = useRideStore();
 
   const filtered = MOCK_RIDE_HISTORY.filter((item) => {
     if (filter === 'all') return true;
@@ -25,6 +25,16 @@ export default function ActivityScreen() {
   });
 
   const handleRebook = (item: RideHistoryItem) => {
+    // Don't overwrite a ride that's already requested or underway
+    if (status !== 'idle' && status !== 'searching' && status !== 'completed' && status !== 'cancelled') {
+      Alert.alert('Ride in progress', 'Finish or cancel your current ride before booking another.', [
+        { text: 'OK', style: 'cancel' },
+        { text: 'View Ride', onPress: () => router.navigate('/(rider)/home') },
+      ]);
+      return;
+    }
+    // Start fresh from idle so the state machine allows → searching
+    reset();
     const place = MOCK_PLACES.find((p) => p.name.includes(item.destination)) || {
       id: `rebook-${Date.now()}`,
       name: item.destination,
@@ -34,7 +44,7 @@ export default function ActivityScreen() {
     };
     setDestination(place);
     transition('searching');
-    router.push('/(rider)/home');
+    router.navigate('/(rider)/home');
   };
 
   return (

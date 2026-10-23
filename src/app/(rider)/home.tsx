@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,21 +17,22 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import * as Linking from 'expo-linking';
+import * as Location from 'expo-location';
 import { MapSimulation } from '../../components/MapSimulation';
 import { useRideStore } from '../../store/rideStore';
 import { useAuthStore } from '../../store/authStore';
 import { useDriverStore } from '../../store/driverStore';
-import {
-  searchPlaces,
-  getVehicleOptions,
-} from '../../services/mockService';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { searchPlaces } from '../../services/mockService';
+import { useLocation } from '../../hooks/useLocation';
+import { Ionicons } from '@expo/vector-icons';
 import { Button } from '../../components/ui/Button';
-import { MOCK_DRIVERS, getDriverByType } from '../../mocks/users';
-import { MOCK_PLACES, DUMMY_CURRENT_LOCATION } from '../../mocks/places';
-import { calculateFare } from '../../utils/fare';
+import { getDriverByType } from '../../mocks/users';
+import { MOCK_PLACES } from '../../mocks/places';
+import { calculateFare, calculateEta } from '../../utils/fare';
+import { safeDistance } from '../../utils/distance';
 import { formatFare } from '../../utils/formatters';
-import type { Place, VehicleOption, VehicleType, PaymentMethod } from '../../types';
+import type { Place, VehicleType, PaymentMethod } from '../../types';
 
 // ── Design tokens ──────────────────────────────────────────────────
 const BLUE = '#2563EB';
@@ -50,6 +51,41 @@ const REVIEW_TAGS = [
   'Safe driving 🛡️',
   'Quick pickup ⚡',
 ];
+
+const VEHICLES: { type: VehicleType; label: string; shortLabel: string; icon: string }[] = [
+  { type: 'bike', label: 'Magic Ride Go (Bike)', shortLabel: 'Moto', icon: '🏍️' },
+  { type: 'car', label: 'Magic Ride Go (Car)', shortLabel: 'Car', icon: '🚗' },
+  { type: 'premium', label: 'Magic Premium', shortLabel: 'Premium', icon: '🚙' },
+];
+
+// Shortest trip we price, so a pickup ≈ destination doesn't show a zero distance
+const MIN_TRIP_KM = 1;
+
+/** Opens the phone dialer or SMS app for the given number. */
+const contactNumber = (scheme: 'tel' | 'sms', phone?: string) => {
+  if (!phone) {
+    Alert.alert('Unavailable', 'No phone number available for this driver.');
+    return;
+  }
+  const number = phone.replace(/[^\d+]/g, '');
+  Linking.openURL(`${scheme}:${number}`).catch(() => {
+    Alert.alert('Unable to open app', `Please contact ${phone} directly.`);
+  });
+};
+
+/** Unique id, timestamp and the random 4-digit PIN the rider shares with the driver at pickup. */
+const newRideMeta = () => {
+  const now = Date.now();
+  return { id: `ride-${now}`, createdAt: now, otp: String(Math.floor(1000 + Math.random() * 9000)) };
+};
+
+/** Greeting that matches the user's local time of day. */
+const greetingForNow = () => {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+};
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string; icon: string; desc: string; badge?: string }[] = [
   { id: 'cash', label: 'Cash on Arrival', icon: '💵', desc: 'Pay physical cash to driver after ride', badge: 'Default' },
@@ -85,7 +121,6 @@ export default function RiderHome() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Place[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [vehicleOptions, setVehicleOptions] = useState<VehicleOption[]>([]);
   const [rating, setRating] = useState(5);
   const [selectedTip, setSelectedTip] = useState<number | null>(null);
   const [comment, setComment] = useState('');
@@ -108,25 +143,75 @@ export default function RiderHome() {
     }, 1200);
   };
 
-  // Set default pickup
+  const confirmCall = () => {
+    Alert.alert(
+      'Call Magic Ride?',
+      'Call 9813957540?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Call',
+          onPress: () => {
+            Linking.openURL('tel:9813957540').catch((error: unknown) => {
+              console.error('Unable to open the phone app:', error);
+              Alert.alert('Unable to place call', 'Please try calling 9813957540 directly.');
+            });
+          },
+        },
+      ],
+    );
+  };
+
+  // Use the device's real position as pickup (falls back to a default if denied).
+  // Refreshed whenever the rider is back on the home state, not mid-ride.
+  const location = useLocation();
+  const needsPickup = status === 'idle' || !pickupPlace;
   useEffect(() => {
-    if (!pickupPlace) {
+    if (location.loading || !needsPickup) return;
+    let cancelled = false;
+    const { coordinate, permissionGranted } = location;
+
+    (async () => {
+      let name = 'Current Location';
+      let address = 'Your current location';
+      if (permissionGranted) {
+        try {
+          const [geo] = await Location.reverseGeocodeAsync(coordinate);
+          if (geo) {
+            name = geo.name || geo.street || name;
+            address = [geo.name, geo.street, geo.district, geo.city].filter(Boolean).join(', ') || address;
+          }
+        } catch {
+          // Geocoding is best-effort; the coordinate is what matters for pricing
+        }
+      }
+      if (cancelled) return;
       setPickup({
         id: 'current-loc',
-        name: 'Janakpur Railway Station',
-        address: 'Janakpur Railway Station, Janakpur',
-        shortAddress: 'Janakpur',
-        coordinate: DUMMY_CURRENT_LOCATION,
+        name,
+        address,
+        shortAddress: name,
+        coordinate,
       });
-    }
-  }, []);
+    })();
 
-  // Fetch vehicle options when destination chosen
-  useEffect(() => {
-    if (destinationPlace) {
-      getVehicleOptions(4.5).then(setVehicleOptions);
-    }
-  }, [destinationPlace]);
+    return () => { cancelled = true; };
+  }, [location.loading, location.coordinate, needsPickup]);
+
+  // Trip distance + per-vehicle fares from the real pickup → destination
+  const tripDistance = useMemo(
+    () => Math.max(MIN_TRIP_KM, safeDistance(pickupPlace?.coordinate ?? null, destinationPlace?.coordinate ?? null)),
+    [pickupPlace, destinationPlace],
+  );
+  const vehicleOptions = useMemo(
+    () => VEHICLES.map((v) => ({
+      ...v,
+      fare: calculateFare(v.type, tripDistance),
+      eta: calculateEta(v.type, tripDistance),
+    })),
+    [tripDistance],
+  );
+  const selectedOption = vehicleOptions.find((v) => v.type === selectedVehicleType) ?? vehicleOptions[1];
 
   // Search handler
   useEffect(() => {
@@ -146,25 +231,6 @@ export default function RiderHome() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     if (status === 'requested') {
-      const fare = calculateFare(selectedVehicleType, 4.5);
-      const payload = {
-        id: `ride-${Date.now()}`,
-        riderId: user?.id || 'rider-001',
-        riderName: user?.name || 'Aarav Sharma',
-        riderRating: user?.rating || 4.9,
-        pickup: pickupPlace || MOCK_PLACES[0],
-        destination: destinationPlace || MOCK_PLACES[1],
-        vehicleType: selectedVehicleType,
-        fare,
-        distance: 4.5,
-        estimatedDuration: 15,
-        paymentMethod: selectedPayment,
-        status: 'requested' as const,
-        otp: '4821',
-        createdAt: Date.now(),
-      };
-      setCurrentRide(payload);
-      setPendingRequest(payload);
       if (demoMode === 'solo') {
         timer = setTimeout(() => {
           setAssignedDriver(getDriverByType(selectedVehicleType));
@@ -190,10 +256,50 @@ export default function RiderHome() {
     transition('searching');
   };
 
-  const handleConfirmRide = () => transition('requested');
+  const handleConfirmRide = () => {
+    const payload = {
+      ...newRideMeta(),
+      riderId: user?.id || 'rider-001',
+      riderName: user?.name || 'Rider',
+      riderRating: user?.rating || 4.9,
+      pickup: pickupPlace || MOCK_PLACES[0],
+      destination: destinationPlace || MOCK_PLACES[1],
+      vehicleType: selectedVehicleType,
+      fare: selectedOption.fare,
+      distance: tripDistance,
+      estimatedDuration: selectedOption.eta,
+      paymentMethod: selectedPayment,
+      status: 'requested' as const,
+    };
+    if (!transition('requested')) return;
+    setCurrentRide(payload);
+    setPendingRequest(payload);
+  };
+
+  /** Leaves the vehicle-selection step — nothing has been booked yet. */
   const handleCancel = () => reset();
 
-  const currentFare = selectedVehicleType === 'bike' ? 5.5 : selectedVehicleType === 'premium' ? 22.0 : 12.0;
+  /** Cancels a requested/active ride after the rider confirms. */
+  const confirmCancelRide = () => {
+    const driverAssigned = status !== 'requested';
+    Alert.alert(
+      driverAssigned ? 'Cancel this ride?' : 'Cancel request?',
+      driverAssigned
+        ? `${assignedDriver?.name || 'Your driver'} is already on the way. Are you sure you want to cancel?`
+        : 'We are still finding you a driver. Stop searching?',
+      [
+        { text: 'Keep Ride', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: () => {
+            setPendingRequest(null);
+            reset();
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: GRAY_BG }}>
@@ -232,6 +338,34 @@ export default function RiderHome() {
         </View>
       </SafeAreaView>
 
+      <View style={styles.contactInfo}>
+        <Pressable
+          style={styles.contactItem}
+          onPress={confirmCall}
+          accessibilityRole="button"
+          accessibilityLabel="Call Magic Ride at 9813957540"
+          accessibilityHint="Opens a confirmation before opening your phone app"
+        >
+          <View style={styles.contactIcon}>
+            <Ionicons name="call" size={18} color={BLUE} />
+          </View>
+          <View>
+            <Text style={styles.contactLabel}>Call us</Text>
+            <Text style={styles.contactText}>9813957540</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={BLUE} />
+        </Pressable>
+        <View style={styles.contactItem}>
+          <View style={styles.contactIcon}>
+            <Ionicons name="location" size={18} color={BLUE} />
+          </View>
+          <View>
+            <Text style={styles.contactLabel}>Our location</Text>
+            <Text style={styles.contactText}>Kathmandu</Text>
+          </View>
+        </View>
+      </View>
+
       {/* ── MAP (Hidden on Completed to give full screen to Review) ── */}
       {status !== 'completed' && (
         <MapSimulation
@@ -257,7 +391,7 @@ export default function RiderHome() {
           {/* ── IDLE: Home screen ─────────────────────────────────── */}
           {status === 'idle' && (
             <View>
-              <Text style={styles.greeting}>Good morning, {user?.name?.split(' ')[0] || 'Samir'}</Text>
+              <Text style={styles.greeting}>{greetingForNow()}{user?.name ? `, ${user.name.split(' ')[0]}` : ''}</Text>
               <Text style={styles.greetingSub}>Where are you going?</Text>
 
               {/* Search bar */}
@@ -328,11 +462,7 @@ export default function RiderHome() {
               </View>
 
               {/* Vehicle options */}
-              {[
-                { type: 'bike' as VehicleType, label: 'Magic Ride Go (Bike)', icon: '🏍️', fare: 'NPR 90', eta: '3 min', dist: '1.2 km' },
-                { type: 'car' as VehicleType, label: 'Magic Ride Go (Car)', icon: '🚗', fare: 'NPR 180', eta: '4 min', dist: '1.2 km' },
-                { type: 'premium' as VehicleType, label: 'Magic Premium', icon: '🚙', fare: 'NPR 350', eta: '5 min', dist: '1.2 km' },
-              ].map((item) => {
+              {vehicleOptions.map((item) => {
                 const sel = selectedVehicleType === item.type;
                 return (
                   <Pressable
@@ -349,10 +479,10 @@ export default function RiderHome() {
                     <Text style={{ fontSize: 28 }}>{item.icon}</Text>
                     <View style={{ flex: 1, marginLeft: 10 }}>
                       <Text style={styles.vehicleName}>{item.label}</Text>
-                      <Text style={styles.vehicleMeta}>{item.eta} · {item.dist}</Text>
+                      <Text style={styles.vehicleMeta}>{item.eta} min · {tripDistance} km</Text>
                     </View>
                     <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                      <Text style={styles.vehicleFare}>{item.fare}</Text>
+                      <Text style={styles.vehicleFare}>{formatFare(item.fare)}</Text>
                       {sel && (
                         <TouchableOpacity
                           style={styles.bookNowChip}
@@ -401,13 +531,7 @@ export default function RiderHome() {
 
               {/* Prominent Request Ride Button */}
               <Button
-                title={`Request ${
-                  selectedVehicleType === 'bike'
-                    ? 'Moto (NPR 90)'
-                    : selectedVehicleType === 'premium'
-                    ? 'Premium (NPR 350)'
-                    : 'Car (NPR 180)'
-                } ➔`}
+                title={`Request ${selectedOption.shortLabel} (${formatFare(selectedOption.fare)}) ➔`}
                 variant="primary"
                 size="lg"
                 onPress={handleConfirmRide}
@@ -428,7 +552,7 @@ export default function RiderHome() {
                 title="Cancel Request"
                 variant="outline"
                 size="md"
-                onPress={handleCancel}
+                onPress={confirmCancelRide}
               />
             </View>
           )}
@@ -442,9 +566,20 @@ export default function RiderHome() {
                   {status === 'arrived' ? '🚗 Driver Arrived!' : 'Driver found'}
                 </Text>
                 <Text style={styles.etaSub}>
-                  {status === 'arrived' ? 'Waiting for you' : '3 min · 0.6 km'}
+                  {status === 'arrived' ? 'Waiting for you at pickup' : 'On the way to your pickup'}
                 </Text>
               </View>
+
+              {/* Ride PIN — rider tells this to the driver to start the trip */}
+              {currentRide?.otp && (
+                <View style={styles.otpCard}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.otpLabel}>Your Ride PIN</Text>
+                    <Text style={styles.otpHint}>Share with your driver only at pickup</Text>
+                  </View>
+                  <Text style={styles.otpValue}>{currentRide.otp}</Text>
+                </View>
+              )}
 
               {/* Driver card */}
               <View style={styles.driverCard}>
@@ -464,11 +599,11 @@ export default function RiderHome() {
 
               {/* Action buttons */}
               <View style={styles.actionRow}>
-                <Pressable style={styles.actionBtn} onPress={() => Alert.alert('Call', `Calling ${assignedDriver?.name}...`)}>
+                <Pressable style={styles.actionBtn} onPress={() => contactNumber('tel', assignedDriver?.phone)}>
                   <Text style={{ fontSize: 18 }}>📞</Text>
                   <Text style={styles.actionLabel}>Call</Text>
                 </Pressable>
-                <Pressable style={styles.actionBtn} onPress={() => Alert.alert('Message', 'Chat demo')}>
+                <Pressable style={styles.actionBtn} onPress={() => contactNumber('sms', assignedDriver?.phone)}>
                   <Text style={{ fontSize: 18 }}>💬</Text>
                   <Text style={styles.actionLabel}>Message</Text>
                 </Pressable>
@@ -478,7 +613,7 @@ export default function RiderHome() {
                 title="Cancel Ride"
                 variant="outline"
                 size="md"
-                onPress={handleCancel}
+                onPress={confirmCancelRide}
                 style={{ marginTop: 8 }}
               />
             </View>
@@ -489,7 +624,9 @@ export default function RiderHome() {
             <View>
               <View style={styles.etaBar}>
                 <Text style={styles.etaText}>On Trip</Text>
-                <Text style={styles.etaSub}>3 min · 1.1 km remaining</Text>
+                <Text style={styles.etaSub}>
+                  ~{currentRide?.estimatedDuration ?? selectedOption.eta} min · {currentRide?.distance ?? tripDistance} km trip
+                </Text>
               </View>
 
               <View style={styles.driverCard}>
@@ -520,8 +657,8 @@ export default function RiderHome() {
                   </View>
                 </View>
                 <View style={styles.fareRow}>
-                  <Text style={styles.fareLabel}>NPR Fare</Text>
-                  <Text style={styles.fareAmount}>NPR 180</Text>
+                  <Text style={styles.fareLabel}>Fare</Text>
+                  <Text style={styles.fareAmount}>{formatFare(currentRide?.fare ?? selectedOption.fare)}</Text>
                 </View>
               </View>
 
@@ -555,10 +692,10 @@ export default function RiderHome() {
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 10 }}>
-                  <Pressable style={styles.smallBtn} onPress={() => Alert.alert('Call', '')}>
+                  <Pressable style={styles.smallBtn} onPress={() => contactNumber('tel', assignedDriver?.phone)}>
                     <Text style={styles.smallBtnText}>Call</Text>
                   </Pressable>
-                  <Pressable style={styles.smallBtn} onPress={() => Alert.alert('Message', '')}>
+                  <Pressable style={styles.smallBtn} onPress={() => contactNumber('sms', assignedDriver?.phone)}>
                     <Text style={styles.smallBtnText}>Message</Text>
                   </Pressable>
                 </View>
@@ -568,8 +705,8 @@ export default function RiderHome() {
                 <View style={styles.tripRow}>
                   <Text style={{ color: BLUE, fontSize: 16, marginRight: 8 }}>📍</Text>
                   <View>
-                    <Text style={styles.tripRowLabel}>Going to</Text>
-                    <Text style={styles.tripRowValue}>{destinationPlace?.name}</Text>
+                    <Text style={styles.tripRowLabel}>From</Text>
+                    <Text style={styles.tripRowValue}>{pickupPlace?.name}</Text>
                   </View>
                 </View>
                 <View style={[styles.tripRow, { marginTop: 12 }]}>
@@ -643,23 +780,31 @@ export default function RiderHome() {
       {/* ── DOCKED BOTTOM BAR (Always visible above device nav bar) ── */}
       {status === 'searching' && (
         <SafeAreaView edges={['bottom']} style={styles.dockedBottomBar}>
-          <TouchableOpacity
-            style={styles.dockedBtn}
-            onPress={handleConfirmRide}
-            activeOpacity={0.88}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.dockedBtnSub}>CONFIRM & START RIDE</Text>
-              <Text style={styles.dockedBtnTitle}>
-                {selectedVehicleType === 'bike'
-                  ? 'Request Magic Ride Go · NPR 90'
-                  : selectedVehicleType === 'premium'
-                  ? 'Request Magic Premium · NPR 350'
-                  : 'Request Magic Ride Go · NPR 180'}
-              </Text>
-            </View>
-            <Ionicons name="arrow-forward-circle" size={30} color="#FFFFFF" />
-          </TouchableOpacity>
+          <View style={styles.dockedActions}>
+            <TouchableOpacity
+              style={styles.dockedCancelBtn}
+              onPress={handleCancel}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel ride selection and return home"
+            >
+              <Ionicons name="close" size={18} color={RED} />
+              <Text style={styles.dockedCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.dockedBtn, styles.dockedRequestBtn]}
+              onPress={handleConfirmRide}
+              activeOpacity={0.88}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dockedBtnSub}>CONFIRM & START RIDE</Text>
+                <Text style={styles.dockedBtnTitle}>
+                  {`Request ${selectedOption.label} · ${formatFare(selectedOption.fare)}`}
+                </Text>
+              </View>
+              <Ionicons name="arrow-forward-circle" size={30} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
         </SafeAreaView>
       )}
 
@@ -820,6 +965,11 @@ const styles = StyleSheet.create({
   switchPill:     { backgroundColor: BLUE_LIGHT, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: BLUE + '30' },
   switchText:     { fontSize: 12, fontWeight: '700', color: BLUE },
   avatar:         { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
+  contactInfo:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 16, marginVertical: 10, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: BLUE_LIGHT, borderWidth: 1, borderColor: '#BFDBFE', borderRadius: 16 },
+  contactItem:    { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  contactIcon:    { width: 36, height: 36, borderRadius: 12, backgroundColor: WHITE, alignItems: 'center', justifyContent: 'center' },
+  contactLabel:   { fontSize: 11, fontWeight: '600', color: TEXT_MUTED, marginBottom: 2 },
+  contactText:    { fontSize: 13, fontWeight: '600', color: TEXT_PRIMARY },
 
   // Sheet
   sheet:          { flex: 1, backgroundColor: WHITE, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -16, paddingHorizontal: 20, paddingTop: 16 },
@@ -834,6 +984,10 @@ const styles = StyleSheet.create({
   shortcutItem:   { flex: 1, alignItems: 'center', gap: 6 },
   shortcutIcon:   { width: 52, height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   shortcutLabel:  { fontSize: 12, fontWeight: '600', color: TEXT_PRIMARY },
+  otpCard:        { flexDirection: 'row', alignItems: 'center', backgroundColor: BLUE_LIGHT, borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: BLUE + '30' },
+  otpLabel:       { fontSize: 14, fontWeight: '800', color: TEXT_PRIMARY },
+  otpHint:        { fontSize: 11, color: TEXT_MUTED, marginTop: 2 },
+  otpValue:       { fontSize: 26, fontWeight: '900', color: BLUE, letterSpacing: 6 },
   promoBanner:    { backgroundColor: BLUE_LIGHT, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: BLUE + '20' },
   promoTitle:     { fontSize: 15, fontWeight: '800', color: TEXT_PRIMARY, marginBottom: 4 },
   promoSub:       { fontSize: 12, color: TEXT_MUTED },
@@ -863,6 +1017,10 @@ const styles = StyleSheet.create({
 
   // Docked Bottom Bar
   dockedBottomBar: { backgroundColor: WHITE, borderTopWidth: 1, borderTopColor: BORDER, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 10 },
+  dockedActions:  { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dockedCancelBtn: { minHeight: 52, minWidth: 92, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1, borderColor: '#FECACA', backgroundColor: '#FEF2F2' },
+  dockedCancelText: { color: RED, fontSize: 14, fontWeight: '700' },
+  dockedRequestBtn: { flex: 1 },
   dockedBtn:      { backgroundColor: BLUE, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 13, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dockedBtnSub:   { color: 'rgba(255, 255, 255, 0.75)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
   dockedBtnTitle: { color: WHITE, fontSize: 15, fontWeight: '800', marginTop: 2 },

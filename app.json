@@ -12,7 +12,8 @@
       "bundleIdentifier": "com.magicride.app",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "MagicRide needs your location to show nearby drivers and navigate your trip.",
-        "NSLocationAlwaysUsageDescription": "MagicRide uses your location to track your trip."
+        "NSLocationAlwaysUsageDescription": "MagicRide uses your location to track your trip.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "config": {
         "googleMapsApiKey": "YOUR_IOS_KEY"

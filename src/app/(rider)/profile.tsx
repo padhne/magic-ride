@@ -42,8 +42,8 @@ export default function RiderProfile() {
             <Text style={{ fontSize: 36 }}>👤</Text>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.userName}>{user?.name || 'Samir Rain'}</Text>
-            <Text style={styles.userPhone}>{user?.phone || '+977 9800000000'}</Text>
+            <Text style={styles.userName}>{user?.name || 'Rider'}</Text>
+            {!!user?.phone && <Text style={styles.userPhone}>{user.phone}</Text>}
           </View>
         </View>
 

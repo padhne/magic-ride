@@ -4,6 +4,8 @@
 //        → arrived → in_progress → completed | cancelled
 
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { RideStatus, RideRequest, Place, VehicleType, PaymentMethod, Coordinate, Driver } from '../types';
 
 // All valid forward transitions
@@ -54,7 +56,7 @@ const initialState = {
   selectedPayment: 'cash' as PaymentMethod,
 };
 
-export const useRideStore = create<RideState>((set, get) => ({
+export const useRideStore = create<RideState>()(persist((set, get) => ({
   ...initialState,
 
   setPickup: (place) => set({ pickupPlace: place }),
@@ -79,4 +81,9 @@ export const useRideStore = create<RideState>((set, get) => ({
   setDriverLocation: (coord) => set({ driverLocation: coord }),
 
   reset: () => set(initialState),
+}), {
+  // Persisted so an active ride survives the app being closed
+  name: 'magicride-ride',
+  storage: createJSONStorage(() => AsyncStorage),
+  partialize: ({ driverLocation, ...rest }) => rest,
 }));
